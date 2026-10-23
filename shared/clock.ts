@@ -38,13 +38,17 @@ export function parseReferenceString(input: string): string[] {
     return pages;
 }
 
-export function simulateClock(pages: readonly string[], frame_count = 4): ClockResult {
+export function validateSimulationInput(pages: readonly string[], frame_count: number): void {
     if (!Number.isInteger(frame_count) || frame_count < 1 || frame_count > MAX_FRAMES) {
         throw new Error(`Choose a whole number of frames between 1 and ${MAX_FRAMES}.`);
     }
     if (pages.length > MAX_REFERENCES || pages.some((page) => typeof page !== "string" || page.length === 0)) {
         throw new Error(`Provide up to ${MAX_REFERENCES} nonempty page references.`);
     }
+}
+
+export function simulateClock(pages: readonly string[], frame_count = 4): ClockResult {
+    validateSimulationInput(pages, frame_count);
     const frames: (string | null)[] = Array(frame_count).fill(null);
     const reference_bits: number[] = Array(frame_count).fill(0);
     const steps: ClockStep[] = [];

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-    MAX_FRAMES, MAX_REFERENCES, SAMPLE_REFERENCE, parseReferenceString, simulateClock,
+    MAX_FRAMES, MAX_REFERENCES, SAMPLE_REFERENCE, parseReferenceString,
 } from "../../shared/clock";
+import { simulateReplacement, type Algorithm } from "../../shared/replacement";
 
 function ClockIcon({ className = "" }: { className?: string }) {
     return <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -10,22 +11,33 @@ function ClockIcon({ className = "" }: { className?: string }) {
     </svg>;
 }
 
-const algorithms = [
-    { name: "FIFO", fullName: "First In, First Out", description: "Replace the page that has been in memory the longest." },
-    { name: "LRU", fullName: "Least Recently Used", description: "Replace the page that has gone the longest without being used." },
-    { name: "MRU", fullName: "Most Recently Used", description: "Replace the page that was used most recently." },
-    { name: "LFU", fullName: "Least Frequently Used", description: "Replace the page with the fewest recorded accesses." },
-    { name: "MFU", fullName: "Most Frequently Used", description: "Replace the page with the most recorded accesses." },
-    { name: "Optimal", fullName: "Optimal Page Replacement", description: "Replace the page whose next use is farthest in the future." },
-    { name: "Clock", fullName: "Second Chance", description: "Follow the clock hand and give recently used pages a second chance." },
+interface AlgorithmInfo {
+    name: Algorithm;
+    fullName: string;
+    description: string;
+    tip: string;
+}
+
+const algorithms: AlgorithmInfo[] = [
+    { name: "FIFO", fullName: "First In, First Out", description: "Replace the page that has been in memory the longest.", tip: "Pages leave in the order they entered memory. A hit does not change a page’s place in that order." },
+    { name: "LRU", fullName: "Least Recently Used", description: "Replace the page that has gone the longest without being used.", tip: "Every request updates the page’s last-use time. When memory is full, replace the page with the oldest last use." },
+    { name: "MRU", fullName: "Most Recently Used", description: "Replace the page that was used most recently.", tip: "Every request updates the page’s last-use time. When memory is full, replace the page with the most recent last use." },
+    { name: "LFU", fullName: "Least Frequently Used", description: "Replace the page with the fewest recorded accesses.", tip: "Counts include all earlier accesses, even across evictions. When counts tie, replace the oldest resident page." },
+    { name: "MFU", fullName: "Most Frequently Used", description: "Replace the page with the most recorded accesses.", tip: "Counts reset when a page is evicted. When counts tie, replace the oldest resident page." },
+    { name: "Optimal", fullName: "Optimal Page Replacement", description: "Replace the page whose next use is farthest in the future.", tip: "Optimal looks ahead in the entire reference string. Pages never used again are replaced first; ties use the lowest frame number. This is a theoretical benchmark because real systems cannot know future requests." },
+    { name: "Clock", fullName: "Second Chance", description: "Follow the clock hand and give recently used pages a second chance.", tip: "A reference bit of 1 gives a page another turn. The clock clears that bit and moves on, replacing the first page it finds with a bit of 0." },
 ];
 
+function algorithmFromHash() {
+    return algorithms.find((algorithm) => window.location.hash === `#/${algorithm.name.toLowerCase()}`);
+}
+
 export default function App() {
-    const [showClock, setShowClock] = useState(() => window.location.hash === "#/clock");
+    const [activeAlgorithm, setActiveAlgorithm] = useState(algorithmFromHash);
 
     useEffect(() => {
         const navigate = () => {
-            setShowClock(window.location.hash === "#/clock");
+            setActiveAlgorithm(algorithmFromHash());
             window.scrollTo(0, 0);
         };
         window.addEventListener("hashchange", navigate);
@@ -33,8 +45,8 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        document.title = showClock ? "Clock · Memory Lab" : "Algorithms · Memory Lab";
-    }, [showClock]);
+        document.title = activeAlgorithm ? `${activeAlgorithm.name} · Memory Lab` : "Algorithms · Memory Lab";
+    }, [activeAlgorithm]);
 
     return <>
         <header className="site-header">
@@ -45,7 +57,7 @@ export default function App() {
                 <span className="lab-tag"><span />Interactive lab</span>
             </div>
         </header>
-        {showClock ? <ClockSimulator /> : <main className="home-page">
+        {activeAlgorithm ? <AlgorithmSimulator key={activeAlgorithm.name} algorithm={activeAlgorithm} /> : <main className="home-page">
             <section className="intro home-intro" aria-labelledby="page-title">
                 <div className="eyebrow"><span className="eyebrow-line" />THE ALGORITHM COLLECTION</div>
                 <h1 id="page-title">A place for every page.<br /><span>Explore the algorithms.</span></h1>
@@ -56,15 +68,13 @@ export default function App() {
                 <div className="algorithm-grid">
                     {algorithms.map((algorithm, index) => {
                         const content = <>
-                            <div className="algorithm-card-top"><span className="algorithm-number">{String(index + 1).padStart(2, "0")}</span>{algorithm.name === "Clock" && <span className="available-tag">Interactive</span>}</div>
+                            <div className="algorithm-card-top"><span className="algorithm-number">{String(index + 1).padStart(2, "0")}</span><span className="available-tag">Interactive</span></div>
                             <h3>{algorithm.name}</h3>
                             <p className="algorithm-full-name">{algorithm.fullName}</p>
                             <p className="algorithm-description">{algorithm.description}</p>
-                            <div className="algorithm-card-footer">{algorithm.name === "Clock" ? <>Open simulator <span aria-hidden="true">↗</span></> : <span>Simulator coming soon</span>}</div>
+                            <div className="algorithm-card-footer">Open simulator <span aria-hidden="true">↗</span></div>
                         </>;
-                        return algorithm.name === "Clock"
-                            ? <a key={algorithm.name} className="algorithm-card interactive-card" href="#/clock">{content}</a>
-                            : <article key={algorithm.name} className="algorithm-card">{content}</article>;
+                        return <a key={algorithm.name} className="algorithm-card interactive-card" href={`#/${algorithm.name.toLowerCase()}`}>{content}</a>;
                     })}
                 </div>
             </section>
@@ -73,14 +83,16 @@ export default function App() {
     </>;
 }
 
-function ClockSimulator() {
+function AlgorithmSimulator({ algorithm }: { algorithm: AlgorithmInfo }) {
+    const isClock = algorithm.name === "Clock";
+    const defaultFrames = isClock ? "4" : "3";
     const [reference, setReference] = useState(SAMPLE_REFERENCE);
-    const [frameCount, setFrameCount] = useState("4");
-    const [result, setResult] = useState(() => simulateClock(parseReferenceString(SAMPLE_REFERENCE)));
+    const [frameCount, setFrameCount] = useState(defaultFrames);
+    const [result, setResult] = useState(() => simulateReplacement(algorithm.name, parseReferenceString(SAMPLE_REFERENCE)));
     const [selected, setSelected] = useState(0);
     const [error, setError] = useState("");
     const [errorField, setErrorField] = useState<"references" | "frames">("references");
-    const [submitted, setSubmitted] = useState({ reference: SAMPLE_REFERENCE, frameCount: "4" });
+    const [submitted, setSubmitted] = useState({ reference: SAMPLE_REFERENCE, frameCount: defaultFrames });
     const referenceInput = useRef<HTMLInputElement>(null);
     const grid = useRef<HTMLDivElement>(null);
     const step = result.steps[selected];
@@ -93,7 +105,7 @@ function ClockSimulator() {
         try {
             const pages = parseReferenceString(reference);
             validatingField = "frames";
-            const next = simulateClock(pages, Number(frameCount));
+            const next = simulateReplacement(algorithm.name, pages, Number(frameCount));
             setResult(next);
             setSelected(0);
             setSubmitted({ reference, frameCount });
@@ -107,7 +119,7 @@ function ClockSimulator() {
 
     function loadExample() {
         setReference(SAMPLE_REFERENCE);
-        setFrameCount("4");
+        setFrameCount(defaultFrames);
         setError("");
         referenceInput.current?.focus();
     }
@@ -129,10 +141,10 @@ function ClockSimulator() {
         <main>
             <a className="back-link" href="#/">← All algorithms</a>
             <section className="intro" aria-labelledby="page-title">
-                <div className="eyebrow"><span className="eyebrow-line" />PAGE REPLACEMENT / 01</div>
-                <h1 id="page-title">Clock page replacement.<br /><span>A second chance, visualized.</span></h1>
-                <p>Explore the <strong>Clock algorithm</strong>. Follow the hand, watch reference bits change,<br className="desktop-break" /> and see exactly when a page stays—or makes room.</p>
-                <div className="intro-clock" aria-hidden="true"><ClockIcon /><span>CLOCK</span></div>
+                <div className="eyebrow"><span className="eyebrow-line" />PAGE REPLACEMENT / {String(algorithms.indexOf(algorithm) + 1).padStart(2, "0")}</div>
+                <h1 id="page-title">{algorithm.name} page replacement.<br /><span>{isClock ? "A second chance, visualized." : `${algorithm.fullName}, visualized.`}</span></h1>
+                <p>Explore the <strong>{algorithm.name} algorithm</strong>. {algorithm.description}<br className="desktop-break" /> Follow every request and see exactly when a page stays—or makes room.</p>
+                {isClock && <div className="intro-clock" aria-hidden="true"><ClockIcon /><span>CLOCK</span></div>}
             </section>
 
             <section className="panel input-panel" aria-labelledby="input-title">
@@ -167,10 +179,10 @@ function ClockSimulator() {
 
                 <div className="panel grid-panel">
                     <div className="panel-heading grid-heading"><span className="section-number">02</span><h3>Memory over time</h3><div className="legend"><span><i className="fault-dot" />Page fault</span><span><i className="hit-dot" />Page hit</span></div></div>
-                    <div className="grid-description">Each column is a page request. Select a step to look inside the clock.</div>
+                    <div className="grid-description">Each column is a page request. Select a step to see how {algorithm.name} makes its decision.</div>
                     <div className="table-scroll" ref={grid} tabIndex={0} role="region" aria-label="Scrollable memory results grid">
                         <table>
-                            <caption className="sr-only">Clock page replacement: frame contents and reference bits after each request</caption>
+                            <caption className="sr-only">{algorithm.name} page replacement: frame contents{isClock ? " and reference bits" : ""} after each request</caption>
                             <thead><tr><th scope="col" className="row-label">Reference<span>STEP →</span></th>
                                 {result.steps.map((item, index) => <th key={index} scope="col" className={index === selected ? "selected-column" : ""}>
                                     <button type="button" data-step={index} className="step-button" aria-label={`Step ${index + 1}: page ${item.page}, ${item.hit ? "hit" : "fault"}`} aria-pressed={index === selected} onClick={() => selectStep(index)}><span className="step-index">{String(index + 1).padStart(2, "0")}</span><span className="page-token" title={item.page}>{item.page}</span></button>
@@ -179,31 +191,29 @@ function ClockSimulator() {
                             <tbody>{Array.from({ length: result.frame_count }, (_, frame) => <tr key={frame}>
                                 <th scope="row" className="row-label">Frame <span className="frame-index">{String(frame + 1).padStart(2, "0")}</span></th>
                                 {result.steps.map((item, index) => <td key={index} className={index === selected ? "selected-column" : ""}>
-                                    <div className={`frame-cell ${item.frame_index === frame ? item.hit ? "hit-cell" : "fault-cell" : ""}`} title={`Frame ${frame + 1}: ${item.frames[frame] ?? "empty"}, reference bit ${item.reference_bits[frame]}`}>
+                                    <div className={`frame-cell ${item.frame_index === frame ? item.hit ? "hit-cell" : "fault-cell" : ""}`} title={`Frame ${frame + 1}: ${item.frames[frame] ?? "empty"}${item.reference_bits ? `, reference bit ${item.reference_bits[frame]}` : ""}`}>
                                         <span className={item.frames[frame] === null ? "empty-value" : ""}>{item.frames[frame] ?? "—"}</span>
-                                        {item.frames[frame] !== null && <sup aria-label={`reference bit ${item.reference_bits[frame]}`}>{item.reference_bits[frame]}</sup>}
+                                        {item.frames[frame] !== null && item.reference_bits && <sup aria-label={`reference bit ${item.reference_bits[frame]}`}>{item.reference_bits[frame]}</sup>}
                                     </div>
                                 </td>)}
                             </tr>)}</tbody>
                             <tfoot><tr><th scope="row" className="row-label">Outcome</th>{result.steps.map((item, index) => <td key={index} className={index === selected ? "selected-column" : ""}><span className={`outcome ${item.hit ? "hit" : "fault"}`} aria-label={item.hit ? "Page hit" : "Page fault"}>{item.hit ? "H" : "F"}</span></td>)}</tr></tfoot>
                         </table>
                     </div>
-                    <div className="grid-foot"><span><sup>1</sup> / <sup>0</sup> Small numbers show reference bits</span><span>Scroll horizontally for longer sequences <span aria-hidden="true">↔</span></span></div>
+                    <div className="grid-foot"><span>{isClock ? <><sup>1</sup> / <sup>0</sup> Small numbers show reference bits</> : "Highlighted cells show the page accessed at each step"}</span><span>Scroll horizontally for longer sequences <span aria-hidden="true">↔</span></span></div>
                 </div>
 
                 <div className="step-panel" aria-labelledby="step-title">
                     <div className="step-detail" aria-live="polite">
-                        <div className="step-kicker"><ClockIcon /><span>INSIDE THE CLOCK</span><span className={`status ${step.hit ? "hit" : "fault"}`}>{step.hit ? "Page hit" : "Page fault"}</span></div>
+                        <div className="step-kicker">{isClock && <ClockIcon />}<span>INSIDE {algorithm.name.toUpperCase()}</span><span className={`status ${step.hit ? "hit" : "fault"}`}>{step.hit ? "Page hit" : "Page fault"}</span></div>
                         <h3 id="step-title">Step {selected + 1}: requesting <span className="inline-page">{step.page}</span></h3>
-                        <p>{step.hit
-                            ? `Page ${step.page} is already in frame ${step.frame_index + 1}. Its reference bit is set to 1, and the clock hand stays in place.`
-                            : `${step.cleared_frames.length ? `The hand clears ${step.cleared_frames.length} reference ${step.cleared_frames.length === 1 ? "bit" : "bits"}, giving those pages a second chance. ` : ""}${step.evicted_page === null ? `Page ${step.page} fills empty frame ${step.frame_index + 1}.` : `Page ${step.page} replaces ${step.evicted_page} in frame ${step.frame_index + 1}.`} The hand moves to frame ${step.next_hand + 1}.`}</p>
+                        <p>{step.explanation}</p>
                     </div>
                     <div className="step-controls"><span className="step-counter">{String(selected + 1).padStart(2, "0")} <span>/ {String(result.steps.length).padStart(2, "0")}</span></span><button className="arrow-button" aria-label="Previous step" disabled={selected === 0} onClick={() => selectStep(selected - 1)}>←</button><button className="arrow-button" aria-label="Next step" disabled={selected === result.steps.length - 1} onClick={() => selectStep(selected + 1)}>→</button></div>
                 </div>
             </section>
-            <aside className="explanation"><span className="info-icon">i</span><p><strong>Why “second chance”?</strong> A reference bit of 1 gives a page another turn. The clock clears that bit and moves on, replacing the first page it finds with a bit of 0.</p></aside>
-            <footer><span>MEMORY LAB <span className="footer-slash">/</span> CLOCK ALGORITHM</span><span>Built for the curious.</span></footer>
+            <aside className="explanation"><span className="info-icon">i</span><p><strong>{isClock ? "Why “second chance”?" : `How ${algorithm.name} chooses.`}</strong> {algorithm.tip}</p></aside>
+            <footer><span>MEMORY LAB <span className="footer-slash">/</span> {algorithm.name.toUpperCase()} ALGORITHM</span><span>Built for the curious.</span></footer>
         </main>
     </>;
 }

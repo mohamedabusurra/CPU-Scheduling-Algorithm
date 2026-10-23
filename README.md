@@ -1,7 +1,7 @@
 # Page-Replacement Algorithms
 
 Standalone Python and TypeScript simulations of FIFO, LRU, MRU, LFU, MFU,
-Optimal, and Clock page replacement, plus a React homepage and Clock simulator.
+Optimal, and Clock page replacement, plus a React homepage and interactive simulators.
 TypeScript scripts live in the root; the Python originals are in `python/`.
 `DynamicRam` is an unfinished RAM allocation prototype
 in both languages; it does not allocate memory or print output.
@@ -10,8 +10,9 @@ in both languages; it does not allocate memory or print output.
 
 Live homepage: https://mohamedabusurra.github.io/CPU-Scheduling-Algorithm/
 
-The homepage displays all seven algorithms. Select **Clock** to open its
-interactive simulator; the other simulator interfaces are marked as coming soon.
+The homepage displays all seven algorithms. Select any card to open its
+interactive simulator, with configurable inputs, hit/fault totals, frame traces,
+and a policy-specific explanation for each step.
 
 Use Node.js 22.12 or newer and npm. From the repository root:
 
@@ -21,9 +22,9 @@ npm run dev
 ```
 
 Open the local URL printed by Vite (normally `http://localhost:5173`) and select
-**Clock**. Enter
+an algorithm. Enter
 page references and choose 1–12 memory frames, then select **Run simulation**.
-The UI shows hit/fault totals, a grid of frame contents and reference bits,
+The UI shows hit/fault totals, a grid of frame contents (with reference bits for Clock),
 and explanations for each step. Select a grid column or use the previous/next
 buttons to explore the trace. Results stay tied to the last submitted input.
 
@@ -32,8 +33,13 @@ Spaces or commas separate page identifiers, so `10, 20, 10` uses whole numbers
 as page names. Add a trailing comma for a single multi-character identifier,
 such as `10,`. Empty input and sequences above 200 references are rejected.
 
-The React app is in `frontend/`, and `shared/clock.ts` supplies the same pure
-simulation engine to both the app and the Clock CLI. Everything runs locally
+The React app is in `frontend/`. `shared/replacement.ts` provides the UI engines
+and step explanations; `shared/clock.ts` supplies the same pure Clock engine
+to both the app and the Clock CLI. Simulators default to three frames, except
+Clock, which defaults to four. Set equal frame counts when comparing algorithms.
+LFU retains counts after eviction; MFU resets them. Frequency ties select the
+oldest resident page, and Optimal ties select the lowest frame number.
+Everything runs locally
 in the browser; no backend or API keys are needed.
 
 ```bash
@@ -92,6 +98,9 @@ all eight compiled scripts is also checked.
 Additional Clock tests cover input parsing, configurable frame counts,
 independent snapshots, reference-bit clearing, and hand position. The Python
 test harness reads scripts from `python/` without modifying them.
+UI-engine tests also compare all six added algorithms with the Python traces,
+verify hand-worked examples and configurable capacities, and check Optimal
+against an exhaustive search for the minimum possible faults on short inputs.
 
 `node_modules/`, `dist/`, and Python bytecode are ignored by Git. The npm
 package is private and intended for running these examples locally.
