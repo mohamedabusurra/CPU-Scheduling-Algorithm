@@ -4,6 +4,7 @@ const { readFileSync } = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
+const { createRequire } = require("node:module");
 
 const root = path.resolve(__dirname, "..");
 const sample = "abtrkacbtlwbclt";
@@ -20,6 +21,7 @@ function run_script(algorithm, reference_string = sample) {
     const output = [];
     vm.runInNewContext(source, {
         exports: {},
+        require: createRequire(path.join(root, "dist", `${algorithm}.js`)),
         console: { log: (...args) => output.push(structuredClone(args)) },
     }, { timeout: 1000 });
     return output;
@@ -113,7 +115,7 @@ test("Clock: histories and totals account for every generated reference", () => 
 
 test("DynamicRam: both unfinished prototypes run silently", () => {
     assert.deepEqual(run_script("DynamicRam"), []);
-    assert.equal(execFileSync("python3", [path.join(root, "DynamicRam.py")], {
+    assert.equal(execFileSync("python3", [path.join(root, "python", "DynamicRam.py")], {
         encoding: "utf8",
     }), "");
     assert.equal(execFileSync(process.execPath, [path.join(root, "dist", "DynamicRam.js")], {

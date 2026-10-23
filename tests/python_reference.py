@@ -9,7 +9,7 @@ import sys
 
 
 algorithm = sys.argv[1]
-source = (Path(__file__).resolve().parent.parent / f"{algorithm}.py").read_text()
+source = (Path(__file__).resolve().parent.parent / "python" / f"{algorithm}.py").read_text()
 results = []
 
 for reference_string in json.load(sys.stdin):

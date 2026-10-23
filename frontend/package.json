@@ -1,0 +1,21 @@
+{
+  "name": "clock-simulator-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build --base=./",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.10",
+    "@types/react-dom": "19.2.3",
+    "vite": "7.3.1"
+  }
+}

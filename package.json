@@ -2,13 +2,16 @@
   "name": "cpu-scheduling-algorithms",
   "version": "1.0.0",
   "private": true,
+  "workspaces": ["frontend"],
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test tests/*.test.cjs"
+    "dev": "npm run dev --workspace frontend",
+    "build": "npm run build:algorithms && npm run build --workspace frontend",
+    "build:algorithms": "tsc",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace frontend",
+    "test": "npm run build:algorithms && node --test tests/*.test.cjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
